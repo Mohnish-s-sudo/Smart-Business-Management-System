@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+:root {
+  --background: #080B12;
+  --surface: #0E1220;
+  --surface-2: #141824;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-2: rgba(255, 255, 255, 0.10);
+  --accent: #7C3AED;
+  --accent-2: #4F46E5;
+  --glow: rgba(124, 58, 237, 0.15);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: white;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Premium scrollbar */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(124,58,237,0.3); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(124,58,237,0.5); }
+
+/* Recharts custom */
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: #0E1220 !important;
+  border: 1px solid rgba(124,58,237,0.25) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: rgba(14, 18, 32, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-hover {
+  transition: all 0.2s ease;
+}
+.glass-hover:hover {
+  background: rgba(20, 24, 36, 0.8);
+  border-color: rgba(124, 58, 237, 0.25);
+}
+
+/* Aurora gradient background */
+.aurora-bg {
+  position: relative;
+  overflow: hidden;
+}
+.aurora-bg::before {
+  content: '';
+  position: absolute;
+  width: 800px;
+  height: 800px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 70%);
+  top: -200px;
+  left: -200px;
+  pointer-events: none;
+}
+.aurora-bg::after {
+  content: '';
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(79,70,229,0.08) 0%, transparent 70%);
+  bottom: -100px;
+  right: -100px;
+  pointer-events: none;
+}
+
+/* Glow effects */
+.glow-purple { box-shadow: 0 0 40px rgba(124, 58, 237, 0.15); }
+.glow-blue   { box-shadow: 0 0 40px rgba(79,  70, 229, 0.15); }
+
+/* Animated gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 40%, #4f46e5 70%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 200% 200%;
+  animation: gradient-shift 4s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Floating animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
+}
+.float { animation: float 4s ease-in-out infinite; }
+
+/* Pulse ring */
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.pulse-ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(124,58,237,0.4);
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* Shimmer loading */
+@keyframes shimmer {
+  0%   { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Grid background */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(124,58,237,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124,58,237,0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Noise texture overlay */
+.noise::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity: 0.4;
+  pointer-events: none;
+}
