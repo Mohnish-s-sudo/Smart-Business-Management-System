@@ -42,15 +42,15 @@ export default function StaffDashboard() {
 
   const loadDash = useCallback(() => {
     apiFetch<DashboardData>('/api/staff/dashboard').then(setDash).catch(console.error)
-  }, [apiFetch])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadProducts = useCallback(() => {
     apiFetch<Product[]>('/api/products').then(setProducts).catch(console.error)
-  }, [apiFetch])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadAlerts = useCallback(() => {
     apiFetch<Alert[]>('/api/staff/alerts').then(setAlerts).catch(console.error)
-  }, [apiFetch])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadDash(); loadProducts() }, [loadDash, loadProducts])
 
