@@ -13,6 +13,7 @@ interface AuthState {
   user: User | null
   token: string | null
   setAuth: (user: User, token: string) => void
+  updateUser: (updates: Partial<User>) => void
   clearAuth: () => void
 }
 
@@ -22,6 +23,9 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       setAuth: (user, token) => set({ user, token }),
+      updateUser: (updates) => set((state) => ({
+        user: state.user ? { ...state.user, ...updates } : state.user,
+      })),
       clearAuth: () => set({ user: null, token: null }),
     }),
     { name: 'sbms-auth' }

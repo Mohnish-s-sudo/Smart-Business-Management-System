@@ -1,18 +1,13 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useApi } from '@/hooks/useApi'
-import { TopBar } from '@/components/layout/TopBar'
-import { Badge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
 import { getUrgencyColor, getConfidenceColor } from '@/lib/utils'
-import { Sparkles, ChevronDown, ChevronUp, CheckCircle, X } from 'lucide-react'
+import { Sparkles, ChevronDown, ChevronUp, CheckCircle, X, TrendingUp } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { L, LCard, LPageHeader, LBadge, LButton, LBone, LEmpty, LFilterChips } from '@/components/owner/LTheme'
+import { OwnerTopBar } from '@/components/layout/OwnerTopBar'
 
-interface Recommendation {
-  _id: string; module: string; title: string; detectedPattern: string
-  businessImpact: string; confidence: string; urgency: string
-  ownerAction: string; dataBasis: string; status: string; createdAt: string
-}
+interface Recommendation { _id: string; module: string; title: string; detectedPattern: string; businessImpact: string; confidence: string; urgency: string; ownerAction: string; dataBasis: string; status: string; createdAt: string }
 
 export default function InsightsPage() {
   const { apiFetch } = useApi()
@@ -21,112 +16,115 @@ export default function InsightsPage() {
   const [moduleFilter, setModuleFilter] = useState('')
   const [urgencyFilter, setUrgencyFilter] = useState('')
   const [updating, setUpdating] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   const load = useCallback(() => {
+    setLoading(true)
     apiFetch<Recommendation[]>(`/api/recommendations?module=${moduleFilter}&urgency=${urgencyFilter}`)
-      .then(setRecs).catch(console.error)
-  }, [moduleFilter, urgencyFilter])
+      .then(setRecs).catch(() => {}).finally(() => setLoading(false))
+  }, [moduleFilter, urgencyFilter]) // eslint-disable-line
 
   useEffect(() => { load() }, [load])
 
-  async function updateStatus(_id: string, status: string) {
-    setUpdating(_id)
+  async function updateStatus(id: string, status: string) {
+    setUpdating(id)
     try {
-      await apiFetch('/api/recommendations', { method: 'PATCH', body: JSON.stringify({ id: _id, status }) })
-      toast.success(status === 'resolved' ? 'Marked as resolved' : 'Dismissed')
-      load()
-    } catch {
-      toast.error('Failed to update')
-    } finally {
-      setUpdating(null) }
+      await apiFetch('/api/recommendations', { method: 'PATCH', body: JSON.stringify({ id, status }) })
+      toast.success(status === 'resolved' ? 'Marked as resolved' : 'Dismissed'); load()
+    } catch { toast.error('Failed') }
+    finally { setUpdating(null) }
   }
 
   const urgentCount = recs.filter(r => r.urgency === 'urgent').length
 
+  const urgencyStyle = (u: string) => u === 'urgent'
+    ? { bg: L.redLt, border: L.redMid }
+    : u === 'monitor'
+    ? { bg: L.amberLt, border: L.amberMid }
+    : { bg: L.blueLt, border: L.blueMid }
+
   return (
-    <div>
-      <TopBar
-        title="ProfitPulse AI"
-        subtitle={`${recs.length} active insights · ${urgentCount} require immediate action`}
-      />
+    <div style={{ background: L.bg, minHeight: '100vh', fontFamily: "'Inter', -apple-system, sans-serif" }}>
+      <OwnerTopBar />
+      <div style={{ padding: '24px 24px 40px', maxWidth: 1280, margin: '0 auto' }}>
+        <LPageHeader title="Analytics & Insights" subtitle={`${recs.length} active insights · ${urgentCount} require immediate action`} />
 
-      {urgentCount > 0 && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 mb-5 text-sm text-red-400">
-          <Sparkles className="w-4 h-4 flex-shrink-0" />
-          {urgentCount} urgent insight{urgentCount > 1 ? 's' : ''} detected — estimated impact visible below
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="flex gap-3 mb-5">
-        <select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)} className="bg-[#1A1D27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
-          <option value="">All Modules</option>
-          {['Sales', 'Inventory', 'Expenses', 'CashFlow'].map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
-        <select value={urgencyFilter} onChange={e => setUrgencyFilter(e.target.value)} className="bg-[#1A1D27] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
-          <option value="">All Urgency</option>
-          {['urgent', 'monitor', 'informational'].map(u => <option key={u} value={u} className="capitalize">{u}</option>)}
-        </select>
-      </div>
-
-      <div className="space-y-3">
-        {recs.map(r => (
-          <div key={r._id} className={`rounded-xl border transition-all ${getUrgencyColor(r.urgency)}`}>
-            <div className="p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <Badge variant={r.urgency === 'urgent' ? 'critical' : r.urgency === 'monitor' ? 'warning' : 'info'}>
-                      {r.urgency}
-                    </Badge>
-                    <Badge variant="muted">{r.module}</Badge>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${getConfidenceColor(r.confidence)}`}>
-                      {r.confidence} confidence
-                    </span>
-                  </div>
-                  <h3 className="text-sm font-semibold text-white mb-1">{r.title}</h3>
-                  <p className="text-xs opacity-80 leading-relaxed">{r.detectedPattern}</p>
-                </div>
-                <button onClick={() => setExpanded(expanded === r._id ? null : r._id)} className="p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0">
-                  {expanded === r._id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              </div>
-
-              {/* Impact highlight */}
-              <div className="mt-3 p-3 rounded-lg bg-black/20 border border-white/5">
-                <p className="text-[10px] text-slate-500 mb-0.5">Estimated Business Impact</p>
-                <p className="text-sm font-semibold text-white">{r.businessImpact}</p>
-              </div>
-
-              {/* Expanded detail */}
-              {expanded === r._id && (
-                <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
-                  <div>
-                    <p className="text-[10px] text-slate-500 mb-1">Recommended Action</p>
-                    <p className="text-sm text-white leading-relaxed">{r.ownerAction}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-slate-500 mb-1">Data Basis</p>
-                    <p className="text-xs opacity-60">{r.dataBasis}</p>
-                  </div>
-                  <div className="flex gap-2 pt-1">
-                    <Button size="sm" variant="secondary" loading={updating === r._id} onClick={() => updateStatus(r._id, 'resolved')}>
-                      <CheckCircle className="w-3.5 h-3.5" /> Mark resolved
-                    </Button>
-                    <Button size="sm" variant="ghost" loading={updating === r._id} onClick={() => updateStatus(r._id, 'dismissed')}>
-                      <X className="w-3.5 h-3.5" /> Dismiss
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
+        {urgentCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: L.redLt, border: `1px solid ${L.redMid}`, borderRadius: 10, marginBottom: 20, fontSize: 13, color: L.red, fontWeight: 500 }}>
+            <Sparkles style={{ width: 15, height: 15, flexShrink: 0 }} />
+            {urgentCount} urgent insight{urgentCount > 1 ? 's' : ''} detected — estimated impact visible below
           </div>
-        ))}
+        )}
 
-        {recs.length === 0 && (
-          <div className="text-center py-16">
-            <Sparkles className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400 text-sm">No active insights for the selected filters</p>
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+          <select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)} style={{ padding: '7px 12px', background: '#fff', border: `1.5px solid ${L.border}`, borderRadius: 9, fontSize: 12, color: L.text, outline: 'none', cursor: 'pointer' }}>
+            <option value="">All Modules</option>
+            {['Sales', 'Inventory', 'Expenses', 'CashFlow'].map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <select value={urgencyFilter} onChange={e => setUrgencyFilter(e.target.value)} style={{ padding: '7px 12px', background: '#fff', border: `1.5px solid ${L.border}`, borderRadius: 9, fontSize: 12, color: L.text, outline: 'none', cursor: 'pointer' }}>
+            <option value="">All Urgency</option>
+            {['urgent', 'monitor', 'informational'].map(u => <option key={u} value={u} style={{ textTransform: 'capitalize' }}>{u}</option>)}
+          </select>
+        </div>
+
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[1, 2, 3].map(i => <LBone key={i} h={100} />)}
+          </div>
+        ) : recs.length === 0 ? (
+          <LCard><LEmpty icon={<Sparkles style={{ width: 32, height: 32 }} />} message="No active insights for the selected filters." /></LCard>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {recs.map(r => {
+              const s = urgencyStyle(r.urgency)
+              return (
+                <div key={r._id} style={{ borderRadius: 14, border: `1.5px solid ${s.border}`, background: s.bg, overflow: 'hidden' }}>
+                  <div style={{ padding: '16px 18px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                          <LBadge variant={r.urgency === 'urgent' ? 'danger' : r.urgency === 'monitor' ? 'warning' : 'info'}>{r.urgency}</LBadge>
+                          <LBadge variant="default">{r.module}</LBadge>
+                          <LBadge variant={r.confidence === 'high' ? 'success' : r.confidence === 'medium' ? 'warning' : 'muted'}>{r.confidence} confidence</LBadge>
+                        </div>
+                        <h3 style={{ fontSize: 14, fontWeight: 700, color: L.text, margin: '0 0 4px' }}>{r.title}</h3>
+                        <p style={{ fontSize: 12, color: L.textSub, margin: 0, lineHeight: 1.5 }}>{r.detectedPattern}</p>
+                      </div>
+                      <button onClick={() => setExpanded(expanded === r._id ? null : r._id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: L.textMuted, padding: 4 }}>
+                        {expanded === r._id ? <ChevronUp style={{ width: 15, height: 15 }} /> : <ChevronDown style={{ width: 15, height: 15 }} />}
+                      </button>
+                    </div>
+
+                    <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 9, background: 'rgba(255,255,255,0.7)', border: `1px solid rgba(255,255,255,0.5)` }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: L.textMuted, margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estimated Business Impact</p>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: L.text, margin: 0 }}>{r.businessImpact}</p>
+                    </div>
+
+                    {expanded === r._id && (
+                      <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid rgba(0,0,0,0.06)`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: L.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>Recommended Action</p>
+                          <p style={{ fontSize: 13, color: L.text, lineHeight: 1.5, margin: 0 }}>{r.ownerAction}</p>
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: L.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>Data Basis</p>
+                          <p style={{ fontSize: 12, color: L.textSub, margin: 0 }}>{r.dataBasis}</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
+                          <LButton size="sm" variant="primary" loading={updating === r._id} onClick={() => updateStatus(r._id, 'resolved')}>
+                            <CheckCircle style={{ width: 12, height: 12 }} /> Mark resolved
+                          </LButton>
+                          <LButton size="sm" variant="ghost" loading={updating === r._id} onClick={() => updateStatus(r._id, 'dismissed')}>
+                            <X style={{ width: 12, height: 12 }} /> Dismiss
+                          </LButton>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

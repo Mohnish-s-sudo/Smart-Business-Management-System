@@ -60,13 +60,18 @@ export default function ProfitPulsePage() {
     const q = question || chatInput.trim()
     if (!q) return
     setChatInput('')
+    // Capture current history before appending the new user message
+    const historySnapshot = [...chatMessages]
     setChatMessages(prev => [...prev, { role: 'user', text: q }])
     setChatLoading(true)
 
     try {
       const data = await apiFetch<{ answer: string }>('/api/profit-pulse/chat', {
         method: 'POST',
-        body: JSON.stringify({ question: q })
+        body: JSON.stringify({
+          question: q,
+          history: historySnapshot.slice(-6), // send last 6 messages for context
+        })
       })
       setChatMessages(prev => [...prev, { role: 'ai', text: data.answer }])
     } catch (err: unknown) {
@@ -906,262 +911,373 @@ export default function ProfitPulsePage() {
     finally { setGenerating(false) }
   }
 
-  const healthColor = (status?: string) => {
-    if (status === 'Excellent') return { ring: 'ring-emerald-500', text: 'text-emerald-400', bg: 'bg-emerald-500' }
-    if (status === 'Good') return { ring: 'ring-teal-500', text: 'text-teal-400', bg: 'bg-teal-500' }
-    if (status === 'Average') return { ring: 'ring-amber-500', text: 'text-amber-400', bg: 'bg-amber-500' }
-    if (status === 'Poor') return { ring: 'ring-orange-500', text: 'text-orange-400', bg: 'bg-orange-500' }
-    return { ring: 'ring-red-500', text: 'text-red-400', bg: 'bg-red-500' }
+  // ── Light-theme design tokens (matches Owner Dashboard) ──────────────────
+  const T = {
+    bg: '#F8FAFC', card: '#FFFFFF', border: '#E2E8F0',
+    text: '#0F172A', textSub: '#475569', textMuted: '#94A3B8',
+    blue: '#2563EB', blueLt: '#EFF6FF', blueMid: '#BFDBFE',
+    green: '#16A34A', greenLt: '#F0FDF4', greenMid: '#BBF7D0',
+    amber: '#D97706', amberLt: '#FFFBEB', amberMid: '#FDE68A',
+    red: '#DC2626', redLt: '#FEF2F2', redMid: '#FECACA',
+    purple: '#7C3AED', purpleLt: '#F5F3FF', purpleMid: '#DDD6FE',
+    shadow: '0 1px 3px rgba(0,0,0,0.06)',
+    shadowMd: '0 4px 16px rgba(0,0,0,0.07)',
   }
 
-  const hc = healthColor(health?.status)
+  // Health score color based on status
+  const healthAccent = (() => {
+    const s = health?.status
+    if (s === 'Excellent') return { color: T.green, lt: T.greenLt, mid: T.greenMid }
+    if (s === 'Good')      return { color: '#0D9488', lt: '#F0FDFA', mid: '#99F6E4' }
+    if (s === 'Average')   return { color: T.amber,  lt: T.amberLt, mid: T.amberMid }
+    if (s === 'Poor')      return { color: '#EA580C', lt: '#FFF7ED', mid: '#FED7AA' }
+    return                        { color: T.red,    lt: T.redLt,   mid: T.redMid }
+  })()
 
-  const insightBg = (type: AIInsight['type']) => ({
-    positive: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-300',
-    negative: 'border-red-500/20 bg-red-500/5 text-red-300',
-    alert: 'border-amber-500/20 bg-amber-500/5 text-amber-300',
-    neutral: 'border-slate-500/20 bg-slate-500/5 text-slate-300',
-  }[type])
+  const insightStyle = (type: AIInsight['type']) => ({
+    positive: { bg: T.greenLt, border: T.greenMid, text: T.green },
+    negative: { bg: T.redLt,   border: T.redMid,   text: T.red },
+    alert:    { bg: T.amberLt, border: T.amberMid, text: T.amber },
+    neutral:  { bg: '#F8FAFC', border: T.border,   text: T.textSub },
+  }[type] ?? { bg: '#F8FAFC', border: T.border, text: T.textSub })
 
-  const priorityBadge = (p: Suggestion['priority']) => ({
-    high: 'bg-red-500/20 text-red-400 border border-red-500/30',
-    medium: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
-    low: 'bg-slate-500/20 text-slate-400 border border-slate-500/30',
-  }[p])
+  const priorityStyle = (p: Suggestion['priority']) => ({
+    high:   { bg: T.redLt,    border: T.redMid,    text: T.red },
+    medium: { bg: T.amberLt,  border: T.amberMid,  text: T.amber },
+    low:    { bg: '#F8FAFC',  border: T.border,    text: T.textMuted },
+  }[p] ?? { bg: '#F8FAFC', border: T.border, text: T.textMuted })
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center space-y-3">
-        <Brain className="w-10 h-10 text-indigo-400 mx-auto animate-pulse" />
-        <p className="text-slate-400 text-sm">Profit Pulse AI is analyzing your business…</p>
+    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: T.bg }}>
+      <div style={{ textAlign: 'center' }}>
+        <Brain style={{ width: 40, height: 40, color: T.purple, margin: '0 auto 12px', opacity: 0.7 }} />
+        <p style={{ fontSize: 14, color: T.textMuted }}>Profit Pulse AI is analysing your business…</p>
       </div>
     </div>
   )
 
+  // ── Card wrapper ──────────────────────────────────────────────────────────
+  const Card = ({ children, style = {} }: { children: React.ReactNode; style?: React.CSSProperties }) => (
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 20, boxShadow: T.shadow, ...style }}>
+      {children}
+    </div>
+  )
+
   return (
-    <div className="space-y-8 pb-12">
+    <div style={{ background: T.bg, minHeight: '100vh', padding: '24px 24px 48px', fontFamily: "'Inter', -apple-system, sans-serif" }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
-            <Brain className="w-5 h-5 text-indigo-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white">Profit Pulse AI</h1>
-            <p className="text-xs text-slate-500">Business Intelligence Module · AI-powered analysis</p>
-          </div>
-        </div>
-        <button onClick={generatePDF} disabled={generating}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm font-medium text-white transition-all">
-          <FileText className="w-4 h-4" />
-          {generating ? 'Generating PDF…' : 'Export Monthly Report'}
-        </button>
-      </div>
-
-      {/* ── SECTION 1: Business Summary ── */}
-      <section>
-        <SectionLabel icon={<Activity className="w-4 h-4" />} title="Business Summary" />
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <MetricTile label="Revenue" value={formatCurrency(summary?.revenue || 0)} trend="up" color="emerald" />
-          <MetricTile label="Expenses" value={formatCurrency(summary?.expenses || 0)} trend="down" color="red" />
-          <MetricTile label="Profit" value={formatCurrency(summary?.profit || 0)} trend={summary && summary.profit >= 0 ? 'up' : 'down'} color={summary && summary.profit >= 0 ? 'indigo' : 'red'} />
-          <MetricTile label="Loss" value={formatCurrency(summary?.loss || 0)} trend="down" color="orange" />
-          <MetricTile label="Profit Margin" value={formatPercent(summary?.profitMargin || 0)} trend={summary && summary.profitMargin >= 20 ? 'up' : 'down'} color={summary && summary.profitMargin >= 20 ? 'teal' : 'amber'} />
-        </div>
-      </section>
-
-      {/* ── SECTION 2: Health Score ── */}
-      <section>
-        <SectionLabel icon={<Sparkles className="w-4 h-4" />} title="Business Health Score" />
-        <div className="bg-[#1A1D27] border border-white/5 rounded-2xl p-6">
-          <div className="flex flex-col lg:flex-row items-center gap-8">
-            {/* Score ring */}
-            <div className="flex-shrink-0 flex flex-col items-center gap-2">
-              <div className={`w-32 h-32 rounded-full ring-4 ${hc.ring} flex flex-col items-center justify-center bg-[#0F1117]`}>
-                <span className={`text-4xl font-black font-mono ${hc.text}`}>{health?.score}</span>
-                <span className="text-xs text-slate-500">/ 100</span>
-              </div>
-              <span className={`text-sm font-bold ${hc.text}`}>{health?.status}</span>
+        {/* ── Page header ── */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14, marginBottom: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: T.purpleLt, border: `1px solid ${T.purpleMid}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Brain style={{ width: 20, height: 20, color: T.purple }} />
             </div>
-            {/* Breakdown bars */}
-            <div className="flex-1 w-full space-y-3">
-              {health?.breakdown.map(b => (
-                <div key={b.label}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-400">{b.label}</span>
-                    <span className="text-white font-medium">{b.score}/{b.max}</span>
+            <div>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: T.text, margin: 0, letterSpacing: '-0.4px' }}>Profit Pulse AI</h1>
+              <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>Business Intelligence Module · AI-powered analysis</p>
+            </div>
+          </div>
+          <button
+            onClick={generatePDF}
+            disabled={generating}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '9px 18px', borderRadius: 10, border: 'none',
+              background: T.blue, color: '#fff', fontSize: 13, fontWeight: 600,
+              cursor: generating ? 'not-allowed' : 'pointer', opacity: generating ? 0.65 : 1,
+              boxShadow: '0 2px 8px rgba(37,99,235,0.25)', transition: 'opacity 0.15s',
+            }}
+          >
+            <FileText style={{ width: 15, height: 15 }} />
+            {generating ? 'Generating PDF…' : 'Export Monthly Report'}
+          </button>
+        </div>
+
+        {/* ── Section 1: Business Summary ── */}
+        <PPSection icon={<Activity style={{ width: 15, height: 15, color: T.blue }} />} title="Business Summary" T={T}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }} className="pp-summary-grid">
+            {[
+              { label: 'Revenue',       value: formatCurrency(summary?.revenue ?? 0),     accent: T.green,  accentLt: T.greenLt,  accentMid: T.greenMid,  icon: <TrendingUp style={{ width: 14, height: 14 }} /> },
+              { label: 'Expenses',      value: formatCurrency(summary?.expenses ?? 0),    accent: T.red,    accentLt: T.redLt,    accentMid: T.redMid,    icon: <TrendingDown style={{ width: 14, height: 14 }} /> },
+              { label: 'Net Profit',    value: formatCurrency(summary?.profit ?? 0),      accent: (summary?.profit ?? 0) >= 0 ? T.blue : T.red, accentLt: (summary?.profit ?? 0) >= 0 ? T.blueLt : T.redLt, accentMid: (summary?.profit ?? 0) >= 0 ? T.blueMid : T.redMid, icon: <TrendingUp style={{ width: 14, height: 14 }} /> },
+              { label: 'Total Loss',    value: formatCurrency(summary?.loss ?? 0),        accent: T.amber,  accentLt: T.amberLt,  accentMid: T.amberMid,  icon: <TrendingDown style={{ width: 14, height: 14 }} /> },
+              { label: 'Profit Margin', value: formatPercent(summary?.profitMargin ?? 0), accent: (summary?.profitMargin ?? 0) >= 20 ? T.green : T.amber, accentLt: (summary?.profitMargin ?? 0) >= 20 ? T.greenLt : T.amberLt, accentMid: (summary?.profitMargin ?? 0) >= 20 ? T.greenMid : T.amberMid, icon: <Activity style={{ width: 14, height: 14 }} /> },
+            ].map(m => (
+              <div key={m.label} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: '14px 16px', boxShadow: T.shadow, transition: 'border-color 0.15s' }}
+                onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = m.accentMid}
+                onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = T.border}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: T.textSub, margin: 0 }}>{m.label}</p>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: m.accentLt, border: `1px solid ${m.accentMid}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: m.accent }}>
+                    {m.icon}
                   </div>
-                  <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full transition-all ${hc.bg}`} style={{ width: `${(b.score / b.max) * 100}%` }} />
+                </div>
+                <p style={{ fontSize: 18, fontWeight: 800, color: m.accent, margin: 0, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.3px' }}>{m.value}</p>
+              </div>
+            ))}
+          </div>
+        </PPSection>
+
+        {/* ── Section 2: Health Score ── */}
+        <PPSection icon={<Sparkles style={{ width: 15, height: 15, color: T.purple }} />} title="Business Health Score" T={T}>
+          <Card>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }} className="pp-health-inner">
+              {/* Score badge + label */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <div style={{
+                    width: 100, height: 100, borderRadius: '50%',
+                    background: healthAccent.lt,
+                    border: `4px solid ${healthAccent.color}`,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <span style={{ fontSize: 32, fontWeight: 900, color: healthAccent.color, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{health?.score ?? '—'}</span>
+                    <span style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>/ 100</span>
                   </div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: healthAccent.color, padding: '3px 10px', borderRadius: 20, background: healthAccent.lt, border: `1px solid ${healthAccent.mid}` }}>
+                    {health?.status ?? '—'}
+                  </span>
+                </div>
+
+                {/* Breakdown bars */}
+                <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {health?.breakdown.map(b => (
+                    <div key={b.label}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                        <span style={{ fontSize: 12, color: T.textSub, fontWeight: 500 }}>{b.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{b.score}/{b.max}</span>
+                      </div>
+                      <div style={{ height: 7, background: '#F1F5F9', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${(b.score / b.max) * 100}%`, background: healthAccent.color, borderRadius: 4, transition: 'width 0.6s ease' }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </PPSection>
+
+        {/* ── Section 3: Profit Trend ── */}
+        <PPSection icon={<TrendingUp style={{ width: 15, height: 15, color: T.blue }} />} title="Profit Trend" T={T}>
+          <Card>
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={trend} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="ppGradRev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor={T.blue}  stopOpacity={0.15} />
+                    <stop offset="95%" stopColor={T.blue}  stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="ppGradPro" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor={T.green} stopOpacity={0.12} />
+                    <stop offset="95%" stopColor={T.green} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                <XAxis dataKey="month" tick={{ fill: T.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: T.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
+                <Tooltip
+                  contentStyle={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, fontSize: 12, color: T.text }}
+                  labelStyle={{ color: T.textSub, fontWeight: 600 }}
+                  formatter={(v) => [formatCurrency(v as number), '']}
+                />
+                <Area type="monotone" dataKey="revenue"  stroke={T.blue}  strokeWidth={2} fill="url(#ppGradRev)" name="Revenue" />
+                <Area type="monotone" dataKey="profit"   stroke={T.green} strokeWidth={2} fill="url(#ppGradPro)" name="Profit" />
+              </AreaChart>
+            </ResponsiveContainer>
+            <div style={{ display: 'flex', gap: 20, marginTop: 12, justifyContent: 'center' }}>
+              {[{ color: T.blue, label: 'Revenue' }, { color: T.green, label: 'Profit' }].map(l => (
+                <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.textSub }}>
+                  <div style={{ width: 14, height: 3, borderRadius: 2, background: l.color }} />{l.label}
                 </div>
               ))}
             </div>
+          </Card>
+        </PPSection>
+
+        {/* ── Sections 4 & 5: Insights + Suggestions ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }} className="pp-two-col">
+          {/* AI Insights */}
+          <div>
+            <PPSectionHead icon={<Brain style={{ width: 14, height: 14, color: T.purple }} />} title="AI Insights" T={T} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {insights.length === 0
+                ? <PPEmpty text="No insights yet — add more business data." T={T} />
+                : insights.map((ins, i) => {
+                    const s = insightStyle(ins.type)
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', borderRadius: 12, background: s.bg, border: `1px solid ${s.border}` }}>
+                        <span style={{ fontSize: 16, flexShrink: 0, lineHeight: 1.4 }}>{ins.icon}</span>
+                        <p style={{ fontSize: 12, color: T.text, lineHeight: 1.6, margin: 0 }}>{ins.text}</p>
+                      </div>
+                    )
+                  })
+              }
+            </div>
+          </div>
+
+          {/* AI Suggestions */}
+          <div>
+            <PPSectionHead icon={<Lightbulb style={{ width: 14, height: 14, color: T.amber }} />} title="AI Suggestions" T={T} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {suggestions.length === 0
+                ? <PPEmpty text="No suggestions yet." T={T} />
+                : suggestions.map((s, i) => {
+                    const ps = priorityStyle(s.priority)
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', borderRadius: 12, background: T.card, border: `1px solid ${T.border}`, boxShadow: T.shadow }}>
+                        <ChevronRight style={{ width: 14, height: 14, color: T.blue, flexShrink: 0, marginTop: 2 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', gap: 6, marginBottom: 5, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: ps.bg, color: ps.text, border: `1px solid ${ps.border}`, textTransform: 'uppercase' }}>{s.priority}</span>
+                            {s.category && <span style={{ fontSize: 10, color: T.textMuted, padding: '2px 7px', borderRadius: 5, background: '#F8FAFC', border: `1px solid ${T.border}` }}>{s.category}</span>}
+                          </div>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: T.text, margin: '0 0 3px' }}>{s.action}</p>
+                          <p style={{ fontSize: 11, color: T.textSub, margin: 0, lineHeight: 1.5 }}>{s.reason}</p>
+                        </div>
+                      </div>
+                    )
+                  })
+              }
+            </div>
           </div>
         </div>
-      </section>
 
-      {/* ── SECTION 3: Profit Trend ── */}
-      <section>
-        <SectionLabel icon={<TrendingUp className="w-4 h-4" />} title="Profit Trend" />
-        <div className="bg-[#1A1D27] border border-white/5 rounded-2xl p-6">
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={trend} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gRevenue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366F1" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#6366F1" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gProfit" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#14B8A6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#14B8A6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-              <XAxis dataKey="month" tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
-              <Tooltip contentStyle={{ background: '#1A1D27', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }} formatter={(v) => [formatCurrency(v as number), '']} />
-              <Area type="monotone" dataKey="revenue" stroke="#6366F1" strokeWidth={2} fill="url(#gRevenue)" name="Revenue" />
-              <Area type="monotone" dataKey="profit" stroke="#14B8A6" strokeWidth={2} fill="url(#gProfit)" name="Profit" />
-            </AreaChart>
-          </ResponsiveContainer>
-          <div className="flex gap-6 mt-3 justify-center">
-            <div className="flex items-center gap-2 text-xs text-slate-400"><span className="w-3 h-0.5 bg-indigo-500 inline-block" />Revenue</div>
-            <div className="flex items-center gap-2 text-xs text-slate-400"><span className="w-3 h-0.5 bg-teal-500 inline-block" />Profit</div>
-          </div>
-        </div>
-      </section>
+        {/* ── Section 6: AI Chat ── */}
+        <PPSection icon={<Bot style={{ width: 15, height: 15, color: T.purple }} />} title="Ask AI About Your Business" T={T}>
+          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, overflow: 'hidden', boxShadow: T.shadow }}>
+            {/* Quick questions */}
+            <div style={{ padding: '14px 16px 10px', borderBottom: `1px solid ${T.border}`, display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              {QUICK_QUESTIONS.map(q => (
+                <button key={q} onClick={() => handleChat(q)} style={{
+                  fontSize: 11, padding: '5px 12px', borderRadius: 20,
+                  background: T.purpleLt, border: `1px solid ${T.purpleMid}`,
+                  color: T.purple, cursor: 'pointer', fontWeight: 500,
+                  transition: 'background 0.12s',
+                }}>
+                  {q}
+                </button>
+              ))}
+            </div>
 
-      {/* ── SECTION 4 & 5: Insights + Suggestions side by side ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* AI Insights */}
-        <section>
-          <SectionLabel icon={<Brain className="w-4 h-4" />} title="AI Insights" />
-          <div className="space-y-2">
-            {insights.map((ins, i) => (
-              <div key={i} className={`flex items-start gap-3 p-4 rounded-xl border ${insightBg(ins.type)}`}>
-                <span className="text-lg flex-shrink-0">{ins.icon}</span>
-                <p className="text-xs leading-relaxed">{ins.text}</p>
-              </div>
-            ))}
-            {insights.length === 0 && <EmptyState text="No insights yet — add more business data." />}
-          </div>
-        </section>
-
-        {/* AI Suggestions */}
-        <section>
-          <SectionLabel icon={<Lightbulb className="w-4 h-4" />} title="AI Suggestions" />
-          <div className="space-y-2">
-            {suggestions.map((s, i) => (
-              <div key={i} className="flex items-start gap-3 p-4 rounded-xl border border-white/5 bg-[#1A1D27]">
-                <ChevronRight className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${priorityBadge(s.priority)}`}>{s.priority}</span>
-                    <span className="text-[10px] text-slate-500 bg-white/5 px-2 py-0.5 rounded-full">{s.category}</span>
+            {/* Messages */}
+            <div style={{ height: 300, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, background: '#FAFBFC' }}>
+              {chatMessages.map((m, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: m.role === 'ai' ? T.purpleLt : T.blueLt, border: `1px solid ${m.role === 'ai' ? T.purpleMid : T.blueMid}` }}>
+                    {m.role === 'ai' ? <Bot style={{ width: 13, height: 13, color: T.purple }} /> : <User style={{ width: 13, height: 13, color: T.blue }} />}
                   </div>
-                  <p className="text-xs font-medium text-white">{s.action}</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{s.reason}</p>
+                  <div style={{
+                    maxWidth: '78%', padding: '9px 13px', borderRadius: 14, fontSize: 12, lineHeight: 1.6,
+                    background: m.role === 'ai' ? T.card : T.blueLt,
+                    color: m.role === 'ai' ? T.text : T.blue,
+                    border: `1px solid ${m.role === 'ai' ? T.border : T.blueMid}`,
+                    borderTopLeftRadius: m.role === 'ai' ? 4 : 14,
+                    borderTopRightRadius: m.role === 'user' ? 4 : 14,
+                  }}>
+                    {m.text}
+                  </div>
                 </div>
-              </div>
-            ))}
-            {suggestions.length === 0 && <EmptyState text="No suggestions yet." />}
-          </div>
-        </section>
-      </div>
+              ))}
+              {chatLoading && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: T.purpleLt, border: `1px solid ${T.purpleMid}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Bot style={{ width: 13, height: 13, color: T.purple }} />
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: 14, background: T.card, border: `1px solid ${T.border}`, display: 'flex', gap: 4 }}>
+                    {[0, 1, 2].map(j => (
+                      <span key={j} style={{ width: 6, height: 6, borderRadius: '50%', background: T.textMuted, display: 'inline-block', animation: 'ppBounce 1.2s ease infinite', animationDelay: `${j * 0.2}s` }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
 
-      {/* ── SECTION 7: AI Chat ── */}
-      <section>
-        <SectionLabel icon={<Bot className="w-4 h-4" />} title="Ask AI About Your Business" />
-        <div className="bg-[#1A1D27] border border-white/5 rounded-2xl overflow-hidden">
-          {/* Quick questions */}
-          <div className="px-4 pt-4 flex flex-wrap gap-2">
-            {QUICK_QUESTIONS.map(q => (
-              <button key={q} onClick={() => handleChat(q)}
-                className="text-xs px-3 py-1.5 rounded-full bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-600/20 transition-colors">
-                {q}
+            {/* Input */}
+            <div style={{ borderTop: `1px solid ${T.border}`, padding: '12px 14px', display: 'flex', gap: 8, background: T.card }}>
+              <input
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleChat()}
+                placeholder="Ask about profit, expenses, inventory…"
+                style={{
+                  flex: 1, padding: '9px 14px', borderRadius: 10,
+                  border: `1.5px solid ${T.border}`, background: '#F8FAFC',
+                  fontSize: 13, color: T.text, outline: 'none', transition: 'border-color 0.15s',
+                }}
+                onFocus={e => (e.target.style.borderColor = T.purple)}
+                onBlur={e => (e.target.style.borderColor = T.border)}
+              />
+              <button
+                onClick={() => handleChat()}
+                disabled={!chatInput.trim() || chatLoading}
+                style={{
+                  width: 40, height: 40, borderRadius: 10, border: 'none',
+                  background: chatInput.trim() && !chatLoading ? T.blue : '#E2E8F0',
+                  color: chatInput.trim() && !chatLoading ? '#fff' : T.textMuted,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: chatInput.trim() && !chatLoading ? 'pointer' : 'not-allowed',
+                  transition: 'background 0.15s',
+                  flexShrink: 0,
+                }}
+              >
+                <Send style={{ width: 15, height: 15 }} />
               </button>
-            ))}
+            </div>
           </div>
+        </PPSection>
 
-          {/* Messages */}
-          <div className="h-72 overflow-y-auto p-4 space-y-3">
-            {chatMessages.map((m, i) => (
-              <div key={i} className={`flex items-start gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${m.role === 'ai' ? 'bg-indigo-600/20' : 'bg-white/10'}`}>
-                  {m.role === 'ai' ? <Bot className="w-3.5 h-3.5 text-indigo-400" /> : <User className="w-3.5 h-3.5 text-slate-400" />}
-                </div>
-                <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-xs leading-relaxed ${m.role === 'ai' ? 'bg-white/5 text-slate-300 rounded-tl-sm' : 'bg-indigo-600/20 text-indigo-200 rounded-tr-sm'}`}>
-                  {m.text}
-                </div>
-              </div>
-            ))}
-            {chatLoading && (
-              <div className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-full bg-indigo-600/20 flex items-center justify-center">
-                  <Bot className="w-3.5 h-3.5 text-indigo-400" />
-                </div>
-                <div className="bg-white/5 px-4 py-2.5 rounded-2xl rounded-tl-sm">
-                  <div className="flex gap-1">
-                    {[0, 1, 2].map(i => <span key={i} className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />)}
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Input */}
-          <div className="border-t border-white/5 p-3 flex gap-2">
-            <input
-              value={chatInput}
-              onChange={e => setChatInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleChat()}
-              placeholder="Ask about profit, expenses, inventory…"
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
-            />
-            <button onClick={() => handleChat()} disabled={!chatInput.trim() || chatLoading}
-              className="w-10 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 flex items-center justify-center transition-colors">
-              <Send className="w-4 h-4 text-white" />
-            </button>
-          </div>
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function SectionLabel({ icon, title }: { icon: React.ReactNode; title: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-3">
-      <div className="text-indigo-400">{icon}</div>
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
-      <div className="flex-1 h-px bg-white/5" />
-    </div>
-  )
-}
-
-function MetricTile({ label, value, trend, color }: { label: string; value: string; trend: 'up' | 'down'; color: string }) {
-  const colors: Record<string, string> = {
-    emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    red: 'text-red-400 bg-red-500/10 border-red-500/20',
-    indigo: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
-    orange: 'text-orange-400 bg-orange-500/10 border-orange-500/20',
-    teal: 'text-teal-400 bg-teal-500/10 border-teal-500/20',
-    amber: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-  }
-  return (
-    <div className={`rounded-xl border p-4 ${colors[color] || colors.indigo}`}>
-      <p className="text-[10px] opacity-70 mb-2">{label}</p>
-      <p className="text-lg font-bold font-mono">{value}</p>
-      <div className="mt-1 opacity-60">
-        {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
       </div>
+
+      <style>{`
+        .pp-summary-grid { grid-template-columns: repeat(5, 1fr) !important; }
+        .pp-two-col { grid-template-columns: 1fr 1fr !important; }
+        @media (max-width: 1024px) {
+          .pp-summary-grid { grid-template-columns: repeat(3, 1fr) !important; }
+        }
+        @media (max-width: 768px) {
+          .pp-summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .pp-two-col { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width: 480px) {
+          .pp-summary-grid { grid-template-columns: 1fr !important; }
+        }
+        @keyframes ppBounce {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.5; }
+          40% { transform: translateY(-5px); opacity: 1; }
+        }
+      `}</style>
     </div>
   )
 }
 
-function EmptyState({ text }: { text: string }) {
-  return <p className="text-xs text-slate-500 text-center py-8 bg-[#1A1D27] rounded-xl border border-white/5">{text}</p>
+// ── Shared sub-components (light theme) ───────────────────────────────────────
+function PPSection({ icon, title, children, T }: { icon: React.ReactNode; title: string; children: React.ReactNode; T: Record<string, string> }) {
+  return (
+    <section style={{ marginBottom: 28 }}>
+      <PPSectionHead icon={icon} title={title} T={T} />
+      {children}
+    </section>
+  )
+}
+
+function PPSectionHead({ icon, title, T }: { icon: React.ReactNode; title: string; T: Record<string, string> }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+      {icon}
+      <h2 style={{ fontSize: 13, fontWeight: 700, color: T.text, margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{title}</h2>
+      <div style={{ flex: 1, height: 1, background: T.border }} />
+    </div>
+  )
+}
+
+function PPEmpty({ text, T }: { text: string; T: Record<string, string> }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '28px 16px', borderRadius: 12, background: '#F8FAFC', border: `1px solid ${T.border}` }}>
+      <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>{text}</p>
+    </div>
+  )
 }

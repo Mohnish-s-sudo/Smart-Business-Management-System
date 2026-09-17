@@ -13,3 +13,32 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ id: user._id, name: user.name, email: user.email, role: user.role, languagePreference: user.languagePreference })
 }
+
+export async function PUT(req: NextRequest) {
+  const payload = getTokenFromRequest(req)
+  if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { name } = await req.json().catch(() => ({ name: '' }))
+  const trimmedName = typeof name === 'string' ? name.trim() : ''
+
+  if (!trimmedName) {
+    return NextResponse.json({ error: 'Name is required' }, { status: 400 })
+  }
+
+  await connectDB()
+  const user = await User.findByIdAndUpdate(
+    payload.userId,
+    { name: trimmedName },
+    { new: true }
+  ).select('name email role languagePreference')
+
+  if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+  return NextResponse.json({
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    languagePreference: user.languagePreference,
+  })
+}

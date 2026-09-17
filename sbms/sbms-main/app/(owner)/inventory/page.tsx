@@ -1,15 +1,12 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useApi } from '@/hooks/useApi'
-import { TopBar } from '@/components/layout/TopBar'
-import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
-import { Input } from '@/components/ui/Input'
-import { Drawer } from '@/components/ui/Drawer'
 import { formatCurrency, formatPercent, getStockStatus, daysUntil } from '@/lib/utils'
-import { Plus, Search, Package, AlertTriangle } from 'lucide-react'
+import { Plus, Search, Package, AlertTriangle, Edit2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useSearchParams } from 'next/navigation'
+import { L, LCard, LCardHead, LPageHeader, LStatCard, LBadge, LButton, LInput, LSelect, LDrawer, LTable, LTR, LTD, LBone, LEmpty } from '@/components/owner/LTheme'
+import { OwnerTopBar } from '@/components/layout/OwnerTopBar'
 
 interface Product {
   _id: string; name: string; sku: string; category: string
@@ -19,21 +16,33 @@ interface Product {
 
 const CATEGORIES = ['Grocery', 'Dairy', 'Personal Care', 'Snacks', 'Beverages', 'Electronics', 'Apparel', 'Other']
 
+function stockBadge(qty: number, threshold: number) {
+  if (qty === 0) return <LBadge variant="danger">Out of Stock</LBadge>
+  if (qty <= threshold) return <LBadge variant="warning">Low Stock</LBadge>
+  return <LBadge variant="success">In Stock</LBadge>
+}
+
 export default function InventoryPage() {
   const { apiFetch } = useApi()
+  const searchParams = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
-  const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('')
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '')
+  const [catFilter, setCatFilter] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editing, setEditing] = useState<Product | null>(null)
   const [form, setForm] = useState({ name: '', sku: '', category: 'Grocery', unitCost: '', retailPrice: '', stockQuantity: '', reorderThreshold: '10', expiryDate: '' })
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   const load = useCallback(() => {
-    apiFetch<Product[]>(`/api/products?search=${search}&category=${categoryFilter}`)
-      .then(setProducts).catch(console.error)
-  }, [search, categoryFilter])
+    setLoading(true)
+    const params = new URLSearchParams({ search, category: catFilter })
+    apiFetch<Product[]>(`/api/products?${params.toString()}`)
+      .then(setProducts).catch(() => {}).finally(() => setLoading(false))
+  }, [search, catFilter]) // eslint-disable-line
 
+  // The fetch synchronizes the table with the current filters.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [load])
 
   function openAdd() { setEditing(null); setForm({ name: '', sku: '', category: 'Grocery', unitCost: '', retailPrice: '', stockQuantity: '', reorderThreshold: '10', expiryDate: '' }); setDrawerOpen(true) }
@@ -50,125 +59,107 @@ export default function InventoryPage() {
       if (editing) await apiFetch(`/api/products/${editing._id}`, { method: 'PUT', body: JSON.stringify(payload) })
       else await apiFetch('/api/products', { method: 'POST', body: JSON.stringify(payload) })
       toast.success(editing ? 'Product updated' : 'Product added')
-      setDrawerOpen(false)
-      load()
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save')
-    } finally {
-      setSaving(false)
-    }
+      setDrawerOpen(false); load()
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Failed') }
+    finally { setSaving(false) }
   }
 
-  const lowStockCount = products.filter(p => p.stockQuantity <= p.reorderThreshold).length
-  const nearExpiryCount = products.filter(p => p.expiryDate && daysUntil(p.expiryDate) <= 7).length
+  const lowCount = products.filter(p => p.stockQuantity <= p.reorderThreshold && p.stockQuantity > 0).length
+  const outCount = products.filter(p => p.stockQuantity === 0).length
+  const nearExpiry = products.filter(p => p.expiryDate && daysUntil(p.expiryDate) <= 7).length
 
   return (
-    <div>
-      <TopBar
-        title="InventoryGuard"
-        subtitle={`${products.length} products · ${lowStockCount} low stock · ${nearExpiryCount} near expiry`}
-        actions={<Button onClick={openAdd} size="sm"><Plus className="w-3.5 h-3.5" /> Add Product</Button>}
-      />
+    <div style={{ background: L.bg, minHeight: '100vh', fontFamily: "'Inter', -apple-system, sans-serif" }}>
+      <OwnerTopBar />
+      <div style={{ padding: '24px 24px 40px', maxWidth: 1280, margin: '0 auto' }}>
+        <LPageHeader title="Inventory" subtitle={`${products.length} products · ${lowCount} low stock · ${nearExpiry} near expiry`} right={<LButton onClick={openAdd}><Plus style={{ width: 14, height: 14 }} /> Add Product</LButton>} />
 
-      {/* Alert banners */}
-      {lowStockCount > 0 && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 mb-4 text-sm text-amber-400">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          {lowStockCount} product{lowStockCount > 1 ? 's' : ''} below reorder threshold — review and restock
+        {/* KPI strip */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }} className="l-kpi4">
+          <LStatCard label="Total Products" value={String(products.length)} sub="active products" icon={<Package style={{ width: 15, height: 15 }} />} accent={L.blue} accentLt={L.blueLt} accentMid={L.blueMid} loading={loading} />
+          <LStatCard label="In Stock" value={String(products.length - lowCount - outCount)} sub="healthy stock" icon={<Package style={{ width: 15, height: 15 }} />} accent={L.green} accentLt={L.greenLt} accentMid={L.greenMid} loading={loading} />
+          <LStatCard label="Low Stock" value={String(lowCount)} sub="needs restocking" icon={<AlertTriangle style={{ width: 15, height: 15 }} />} accent={L.amber} accentLt={L.amberLt} accentMid={L.amberMid} loading={loading} />
+          <LStatCard label="Out of Stock" value={String(outCount)} sub="zero inventory" icon={<AlertTriangle style={{ width: 15, height: 15 }} />} accent={L.red} accentLt={L.redLt} accentMid={L.redMid} loading={loading} />
         </div>
-      )}
 
-      <Card>
-        {/* Filters */}
-        <div className="flex flex-wrap gap-3 mb-4">
-          <div className="relative flex-1 min-w-48">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products..." className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50" />
+        {/* Alert banner */}
+        {lowCount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', background: L.amberLt, border: `1px solid ${L.amberMid}`, borderRadius: 10, marginBottom: 16, fontSize: 13, color: L.amber }}>
+            <AlertTriangle style={{ width: 15, height: 15, flexShrink: 0 }} />
+            {lowCount} product{lowCount > 1 ? 's' : ''} below reorder threshold — review and restock soon.
           </div>
-          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="bg-[#0F1117] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
-            <option value="">All Categories</option>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
+        )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/5">
-                {['Product', 'SKU', 'Category', 'Stock', 'Reorder', 'Cost', 'Price', 'Margin', 'Expiry', 'Status'].map(h => (
-                  <th key={h} className="text-left text-xs text-slate-500 font-medium pb-3 pr-4">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/3">
-              {products.map(p => {
-                const status = getStockStatus(p.stockQuantity, p.reorderThreshold)
-                const margin = ((p.retailPrice - p.unitCost) / p.retailPrice) * 100
-                const expDays = p.expiryDate ? daysUntil(p.expiryDate) : null
-                return (
-                  <tr key={p._id} onClick={() => openEdit(p)} className="hover:bg-white/3 cursor-pointer transition-colors">
-                    <td className="py-3 pr-4 font-medium text-white">{p.name}</td>
-                    <td className="py-3 pr-4 text-slate-500 font-mono text-xs">{p.sku}</td>
-                    <td className="py-3 pr-4 text-slate-400">{p.category}</td>
-                    <td className="py-3 pr-4 font-mono text-white">{p.stockQuantity}</td>
-                    <td className="py-3 pr-4 text-slate-500">{p.reorderThreshold}</td>
-                    <td className="py-3 pr-4 text-slate-400">{formatCurrency(p.unitCost)}</td>
-                    <td className="py-3 pr-4 text-white">{formatCurrency(p.retailPrice)}</td>
-                    <td className="py-3 pr-4">
-                      <span className={margin >= 25 ? 'text-emerald-400' : margin >= 15 ? 'text-amber-400' : 'text-red-400'}>
-                        {formatPercent(margin)}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      {expDays !== null ? (
-                        <span className={expDays <= 3 ? 'text-red-400' : expDays <= 7 ? 'text-amber-400' : 'text-slate-400'}>
-                          {expDays <= 0 ? 'Expired' : `${expDays}d`}
-                        </span>
-                      ) : <span className="text-slate-600">—</span>}
-                    </td>
-                    <td className="py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${status.color}`}>
-                        {status.label}
-                      </span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={editing ? 'Edit Product' : 'Add Product'}>
-        <div className="space-y-4">
-          <Input label="Product name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Basmati Rice 5kg" />
-          <Input label="SKU" value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} placeholder="e.g. GRC-001" />
-          <div>
-            <label className="text-xs font-medium text-slate-400 block mb-1.5">Category</label>
-            <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="w-full bg-[#0F1117] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
+        {/* Filters + table */}
+        <LCard>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+            <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
+              <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 13, height: 13, color: L.textMuted, pointerEvents: 'none' }} />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products…" style={{ width: '100%', padding: '8px 10px 8px 30px', background: '#F8FAFC', border: `1.5px solid ${L.border}`, borderRadius: 9, fontSize: 13, color: L.text, outline: 'none' }} />
+            </div>
+            <select value={catFilter} onChange={e => setCatFilter(e.target.value)} style={{ padding: '8px 14px', background: '#F8FAFC', border: `1.5px solid ${L.border}`, borderRadius: 9, fontSize: 13, color: L.text, outline: 'none', cursor: 'pointer' }}>
+              <option value="">All Categories</option>
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Unit cost (₹)" type="number" value={form.unitCost} onChange={e => setForm(f => ({ ...f, unitCost: e.target.value }))} />
-            <Input label="Retail price (₹)" type="number" value={form.retailPrice} onChange={e => setForm(f => ({ ...f, retailPrice: e.target.value }))} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Stock quantity" type="number" value={form.stockQuantity} onChange={e => setForm(f => ({ ...f, stockQuantity: e.target.value }))} />
-            <Input label="Reorder threshold" type="number" value={form.reorderThreshold} onChange={e => setForm(f => ({ ...f, reorderThreshold: e.target.value }))} />
-          </div>
-          <Input label="Expiry date (optional)" type="date" value={form.expiryDate} onChange={e => setForm(f => ({ ...f, expiryDate: e.target.value }))} />
-          {form.unitCost && form.retailPrice && (
-            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400">
-              Margin: {formatPercent(((parseFloat(form.retailPrice) - parseFloat(form.unitCost)) / parseFloat(form.retailPrice)) * 100)}
-            </div>
+
+          {loading ? <LBone h={240} /> : products.length === 0 ? <LEmpty icon={<Package style={{ width: 32, height: 32 }} />} message="No products found." /> : (
+            <LTable headers={['Product', 'SKU', 'Category', 'Stock', 'Reorder', 'Cost', 'Price', 'Margin', 'Expiry', 'Status', '']}>
+              {products.map(p => {
+                const margin = p.retailPrice > 0 ? ((p.retailPrice - p.unitCost) / p.retailPrice) * 100 : 0
+                const expDays = p.expiryDate ? daysUntil(p.expiryDate) : null
+                return (
+                  <LTR key={p._id} onClick={() => openEdit(p)}>
+                    <LTD><span style={{ fontWeight: 600, color: L.text }}>{p.name}</span></LTD>
+                    <LTD muted><span style={{ fontFamily: 'monospace', fontSize: 11 }}>{p.sku}</span></LTD>
+                    <LTD muted>{p.category}</LTD>
+                    <LTD><span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: p.stockQuantity === 0 ? L.red : p.stockQuantity <= p.reorderThreshold ? L.amber : L.text }}>{p.stockQuantity}</span></LTD>
+                    <LTD muted>{p.reorderThreshold}</LTD>
+                    <LTD muted>{formatCurrency(p.unitCost)}</LTD>
+                    <LTD><span style={{ fontWeight: 600 }}>{formatCurrency(p.retailPrice)}</span></LTD>
+                    <LTD><span style={{ color: margin >= 25 ? L.green : margin >= 15 ? L.amber : L.red, fontWeight: 600 }}>{formatPercent(margin)}</span></LTD>
+                    <LTD>
+                      {expDays !== null
+                        ? <span style={{ color: expDays <= 0 ? L.red : expDays <= 7 ? L.amber : L.textMuted, fontSize: 12 }}>{expDays <= 0 ? 'Expired' : `${expDays}d`}</span>
+                        : <span style={{ color: L.textMuted }}>—</span>}
+                    </LTD>
+                    <LTD>{stockBadge(p.stockQuantity, p.reorderThreshold)}</LTD>
+                    <LTD><Edit2 style={{ width: 13, height: 13, color: L.textMuted }} /></LTD>
+                  </LTR>
+                )
+              })}
+            </LTable>
           )}
-          <Button onClick={save} loading={saving} className="w-full justify-center">
-            {editing ? 'Update Product' : 'Add Product'}
-          </Button>
-        </div>
-      </Drawer>
+        </LCard>
+
+        <LDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={editing ? 'Edit Product' : 'Add Product'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <LInput label="Product name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Basmati Rice 5kg" />
+            <LInput label="SKU" value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} placeholder="e.g. GRC-001" />
+            <LSelect label="Category" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </LSelect>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <LInput label="Unit cost (₹)" type="number" value={form.unitCost} onChange={e => setForm(f => ({ ...f, unitCost: e.target.value }))} />
+              <LInput label="Retail price (₹)" type="number" value={form.retailPrice} onChange={e => setForm(f => ({ ...f, retailPrice: e.target.value }))} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <LInput label="Stock quantity" type="number" value={form.stockQuantity} onChange={e => setForm(f => ({ ...f, stockQuantity: e.target.value }))} />
+              <LInput label="Reorder threshold" type="number" value={form.reorderThreshold} onChange={e => setForm(f => ({ ...f, reorderThreshold: e.target.value }))} />
+            </div>
+            <LInput label="Expiry date (optional)" type="date" value={form.expiryDate} onChange={e => setForm(f => ({ ...f, expiryDate: e.target.value }))} />
+            {form.unitCost && form.retailPrice && (
+              <div style={{ padding: '10px 12px', background: L.greenLt, border: `1px solid ${L.greenMid}`, borderRadius: 9, fontSize: 12, color: L.green, fontWeight: 600 }}>
+                Margin: {formatPercent(((parseFloat(form.retailPrice) - parseFloat(form.unitCost)) / parseFloat(form.retailPrice)) * 100)}
+              </div>
+            )}
+            <LButton onClick={save} loading={saving} style={{ width: '100%', justifyContent: 'center' }}>
+              {editing ? 'Update Product' : 'Add Product'}
+            </LButton>
+          </div>
+        </LDrawer>
+      </div>
+      <style>{`.l-kpi4{grid-template-columns:repeat(4,1fr)} @media(max-width:900px){.l-kpi4{grid-template-columns:repeat(2,1fr)!important}} @media(max-width:480px){.l-kpi4{grid-template-columns:1fr!important}}`}</style>
     </div>
   )
 }

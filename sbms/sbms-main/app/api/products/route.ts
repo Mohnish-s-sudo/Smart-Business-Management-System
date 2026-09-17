@@ -15,7 +15,11 @@ export async function GET(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filter: Record<string, any> = { isActive: true }
-  if (search) filter.name = { $regex: search, $options: 'i' }
+  if (search) {
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const searchRegex = { $regex: escapedSearch, $options: 'i' }
+    filter.$or = [{ name: searchRegex }, { sku: searchRegex }, { category: searchRegex }]
+  }
   if (category) filter.category = category
 
   let products = await Product.find(filter).sort({ name: 1 })
